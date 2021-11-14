@@ -1,0 +1,16 @@
+[package]
+name = "add-editorconfig"
+version = "0.1.0"
+description = "Generate .editorconfig file in current directory"
+edition = "2018"
+authors = ["Reinaldy Rafli <aldy505@tutanota.com>"]
+categories = ["command-line-utilities"]
+license = "MIT"
+homepage = "https://github.com/aldy505/add-editorconfig"
+repository = "https://github.com/aldy505/add-editorconfig"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dirs = "4.0"

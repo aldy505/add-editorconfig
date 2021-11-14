@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  Build:
+    name: API
+    runs-on: ubuntu-latest
+    container: rust:1.56-buster
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check
+        run: cargo check
+
+      - name: Build
+        run: cargo build
