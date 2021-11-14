@@ -25,8 +25,8 @@ Yes, you'll need to build from source.
 
 1. Clone this repository.
 2. Make sure to have Rust in your system. At this point of time, I have v1.54.0.
-3. Run `cargo build`.
-4. Run `sudo cp -v target/debug/add-editorconfig /usr/local/bin`.
+3. Run `cargo build --all-targets --release`.
+4. Run `sudo cp -v target/release/add-editorconfig /usr/local/bin`.
 If you're not running in Linux, try to check how to move file on your own.
 5. Check it via `add-editorconfig version`.
 
