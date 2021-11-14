@@ -1,8 +1,13 @@
-use std::{env, fs::{self, File}, io::{self, Error, Write}, path::{Path, PathBuf}};
+use std::{
+    env,
+    fs::{self, File},
+    io::{self, Error, Write},
+    path::{Path, PathBuf},
+};
 extern crate dirs;
 
-#[derive(Debug,Clone)]
-pub struct Settings {
+#[derive(Debug)]
+struct Settings {
     end_of_line: String,
     indent_size: i32,
     indent_style: String,
@@ -14,199 +19,193 @@ pub struct Settings {
     max_line_length: i32,
 }
 
+impl Settings {
+    fn new() -> Self {
+        Settings {
+            end_of_line: String::from("lf"),
+            indent_size: 4,
+            indent_style: String::from("space"),
+            tab_width: 4,
+            charset: String::from("utf-8"),
+            root: true,
+            trim_trailing_whitespace: true,
+            insert_final_newline: true,
+            max_line_length: 80,
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let current_path: PathBuf = Path::new(".editorconfig").to_path_buf();
 
     // Check if the user supplied any args
     if args.len() > 1 {
-        if args[1] == "default" {
-            let default_path: PathBuf = dirs::home_dir().unwrap().join(".editorconfig");
-            // Check if there is default editorconfig
-            // already exists on `~/.editorconfig`
-            if !Path::new(default_path.as_os_str()).exists() {
-                println!("Looks like there is no default .editorconfig on your home directory. Creating one..");
-                let p: Settings = prompt();
-                // If not, create one
-                match create_config(default_path, p.clone()) {
-                    Ok(_) => println!("Successfully created .editorconfig on your home directory."),
-                    Err(e) => println!("Error: {}", e)
-                }
+        match args[1].as_str() {
+            "default" => {
+                if let Some(home_dir) = dirs::home_dir() {
+                    let default_path = home_dir.join(".editorconfig");
+                    let is_default_cfg_exists = Path::new(default_path.as_os_str()).exists();
 
-                match create_config(current_path, p.clone()) {
-                    Ok(_) => println!("Successfully created .editorconfig on current directory."),
-                    Err(e) => println!("Error: {}", e)
-                }
+                    // Check if there is default editorconfig
+                    // already exists on `~/.editorconfig`
+                    if !is_default_cfg_exists {
+                        println!("Looks like there is no default .editorconfig on your home directory. Creating one..");
+                        let settings = get_user_settings();
 
+                        // If not, create one
+                        match create_config(&default_path, &settings) {
+                            Ok(_) => println!(
+                                "Successfully created .editorconfig on your home directory."
+                            ),
+                            Err(e) => println!("Error: {}", e),
+                        }
+
+                        match create_config(&current_path, &settings) {
+                            Ok(_) => {
+                                println!("Successfully created .editorconfig on current directory.")
+                            }
+                            Err(e) => println!("Error: {}", e),
+                        }
+                    }
+
+                    // If there is, print a message
+                    println!("Using default .editorconfig...\n");
+                    match fs::read_to_string(default_path) {
+                        Ok(s) => match create_config(&current_path, &parse_settings(s)) {
+                            Ok(_) => println!("Successfully created .editorconfig"),
+                            Err(e) => println!("Error: {}", e),
+                        },
+                        Err(e) => println!("Error: {}", e),
+                    }
+                } else {
+                    println!("Failed to get home directory. Exiting...");
+                }
                 return;
             }
-
-            // If there is, print a message
-            println!("Using default .editorconfig...\n");
-            match fs::read_to_string(default_path) {
-                Ok(s) => {
-                    match create_config(current_path, parse_settings(s)) {
-                        Ok(_) => println!("Successfully created .editorconfig"),
-                        Err(e) => println!("Error: {}", e)
-                    }
-                },
-                Err(e) => println!("Error: {}", e),
+            "version" | "--version" | "-v" => {
+                println!("add-editorconfig 0.1.0");
+                return;
             }
-            return;
-        } else if args[1] == "version" || args[1] == "--version" || args[1] == "-v" {
-          println!("add-editorconfig 0.1.0");
-          return;
-        } else if args[1] == "help" || args[1] == "--help" || args[1] == "-h" {
-          println!("add-editorconfig");
-          println!("Small and simple CLI app to generate .editorconfig based on a given settings.\n");
-          println!("Usage:");
-          println!("    add-editorconfig         - Create an .editorconfig in the current directory");
-          println!("    add-editorconfig default - Create an .editorconfig with the default config");
-          println!("                               from .editorconfig that exists on the home directory.");
-          println!("    add-editorconfig help    - Print this help command");
-          println!("    add-editorconfig version - Show current version\n");
-          println!("If you had encountered with any bugs, please open an issue at:");
-          println!("https://github.com/aldy505/add-editorconfig");
-          return;
+            "help" | "--help" | "-h" | _ => {
+                println!(
+                    "
+add-editorconfig
+Small and simple CLI app to generate .editorconfig based on a given settings.
+
+Usage:
+    add-editorconfig         - Create an .editorconfig in the current directory
+    add-editorconfig default - Create an .editorconfig with the default config
+                               from .editorconfig that exists on the home directory.
+    add-editorconfig help    - Print this help command
+    add-editorconfig version - Show current version
+
+If you had encountered with any bugs, please open an issue at:
+https://github.com/aldy505/add-editorconfig
+                       "
+                );
+                return;
+            }
         }
-
     }
 
-    let p: Settings = prompt();
-    match create_config(current_path, p) {
+    let settings = get_user_settings();
+    match create_config(&current_path, &settings) {
         Ok(_) => println!("Successfully created .editorconfig"),
-        Err(e) => println!("Error: {}", e)
+        Err(e) => println!("Error: {}", e),
     }
 }
 
-pub fn default_settings() -> Settings {
-    return Settings {
-        end_of_line: String::from("lf"),
-        indent_size: 4,
-        indent_style: String::from("space"),
-        tab_width: 4,
-        charset: String::from("utf-8"),
-        root: true,
-        trim_trailing_whitespace: true,
-        insert_final_newline: true,
-        max_line_length: 80
-    };
+fn prompt(text: &str, temp: &mut String) {
+    print!("{}", text);
+    io::stdout().flush().unwrap();
+    io::stdin().read_line(temp).unwrap();
 }
 
-pub fn prompt() -> Settings {
-    let mut settings: Settings = Settings {
-        ..default_settings()
-    };
+fn get_user_settings() -> Settings {
+    let mut settings = Settings::new();
     let mut temp = String::new();
+
     println!("Fill the config with the provided options.");
-    println!("Entering nothing will set the parameter to its' default value.\n");
+    println!("Entering nothing will set the parameter to its default value.\n");
 
     // indent_style
-    print!("Indentation style (space / tabs): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim() == "tabs" {
-        settings.indent_style = String::from("tabs");
-    } else {
-        settings.indent_style = String::from("space");
-    }
+    prompt("Indentation style (space / tabs): ", &mut temp);
+    settings.indent_style = match temp.trim() {
+        "tabs" => String::from("tabs"),
+        _ => String::from("space"),
+    };
     temp = String::from("");
 
     // indent_size
-    print!("Indent size (number): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim().parse::<i32>().is_ok() {
-        settings.indent_size = temp.trim().parse::<i32>().unwrap();
-    } else {
-        settings.indent_size = 4;
-    }
-    temp = String::from("");
-
-
-    // tab_width
-    print!("Tab width (number): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim().parse::<i32>().is_ok() {
-        settings.tab_width = temp.trim().parse::<i32>().unwrap();
-    } else {
-        settings.tab_width = 4;
+    prompt("Indent size (number): ", &mut temp);
+    if let Ok(indent_size) = temp.trim().parse::<i32>() {
+        settings.indent_size = indent_size;
     }
     temp = String::from("");
 
     // tab_width
-    print!("End of line (lf / crlf / cr): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim() == "lf" {
-        settings.end_of_line = String::from("lf");
-    } else if temp.trim() == "crlf" {
-        settings.end_of_line = String::from("crlf");
-    } else if temp.trim() == "cr" {
-        settings.end_of_line = String::from("cr");
-    } else {
-        settings.end_of_line = String::from("lf");
-    }
+    prompt("Tab width (number): ", &mut temp);
+    settings.tab_width = match temp.trim().parse::<i32>() {
+        Ok(tab_width) => tab_width,
+        Err(_) => 4,
+    };
+    temp = String::from("");
+
+    // tab_width
+    prompt("End of line (lf / crlf / cr): ", &mut temp);
+    settings.end_of_line = match temp.trim() {
+        "crlf" => String::from("crlf"),
+        "cr" => String::from("cr"),
+        "lf" | _ => String::from("lf"),
+    };
     temp = String::from("");
 
     // charset
-    print!("Charset (latin1 / utf-8 / utf-16be / utf-16le / utf-8-bom): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim() == "latin1" {
-        settings.charset = String::from("latin1");
-    } else if temp.trim() == "utf-8" {
-        settings.charset = String::from("utf-8");
-    } else if temp.trim() == "utf-16be" {
-        settings.charset = String::from("utf-16be");
-    } else if temp.trim() == "utf-16le" {
-        settings.charset = String::from("utf-16le");
-    } else if temp.trim() == "utf-8-bom" {
-        settings.charset = String::from("utf-8-bom");
-    } else {
-        settings.charset = String::from("utf-8");
-    }
+    prompt(
+        "Charset (latin1 / utf-8 / utf-16be / utf-16le / utf-8-bom): ",
+        &mut temp,
+    );
+    settings.charset = match temp.trim() {
+        "latin1" => String::from("latin1"),
+        "utf-16be" => String::from("utf-16be"),
+        "utf-16le" => String::from("utf-16le"),
+        "utf-8-bom" => String::from("utf-8-bom"),
+        "utf-8" | _ => String::from("utf-8"),
+    };
     temp = String::from("");
 
     // trim_trailing_whitespace
-    print!("Trim trailing whitespace (true / false): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim() == "true" {
-        settings.trim_trailing_whitespace = true;
-    } else {
-        settings.trim_trailing_whitespace = false;
-    }
+    prompt("Trim trailing whitespace (true / false): ", &mut temp);
+    settings.trim_trailing_whitespace = match temp.trim() {
+        "true" => true,
+        _ => false,
+    };
     temp = String::from("");
 
     // insert_final_newline
-    print!("Insert final newline (true / false): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim() == "true" {
-        settings.insert_final_newline = true;
-    } else {
-        settings.insert_final_newline = false;
-    }
+    prompt("Insert final newline (true / false): ", &mut temp);
+    settings.insert_final_newline = match temp.trim() {
+        "true" => true,
+        _ => false,
+    };
     temp = String::from("");
 
     // max_line_length
-    print!("Max line length (number): ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut temp).unwrap();
-    if temp.trim().parse::<i32>().is_ok() {
-        settings.max_line_length = temp.trim().parse::<i32>().unwrap();
-    } else {
-        settings.max_line_length = 80;
-    }
+    prompt("Max line length (number): ", &mut temp);
+    settings.max_line_length = match temp.trim().parse::<i32>() {
+        Ok(max_len) => max_len,
+        Err(_) => 80,
+    };
+
     print!("\n");
 
-    return settings;
+    settings
 }
 
-pub fn create_config(path: PathBuf, settings: Settings) -> Result<(), Error> {
+fn create_config(path: &PathBuf, settings: &Settings) -> Result<(), Error> {
     let mut file = File::create(path)?;
+
     let config: Vec<String> = vec![
         format!("root = {}", settings.root),
         format!(""),
@@ -216,54 +215,45 @@ pub fn create_config(path: PathBuf, settings: Settings) -> Result<(), Error> {
         format!("indent_style = {}", settings.indent_style),
         format!("tab_width = {}", settings.tab_width),
         format!("charset = {}", settings.charset),
-        format!("trim_trailing_whitespace = {}", settings.trim_trailing_whitespace),
+        format!(
+            "trim_trailing_whitespace = {}",
+            settings.trim_trailing_whitespace
+        ),
         format!("insert_final_newline = {}", settings.insert_final_newline),
         format!("max_line_length = {}", settings.max_line_length),
     ];
-    let w = file.write_all(config.join("\n").as_bytes());
-    return w;
+
+    file.write_all(config.join("\n").as_bytes())
 }
 
-pub fn parse_settings(str: String) -> Settings {
+fn parse_settings(str: String) -> Settings {
     let s: Vec<&str> = str.split_terminator("\n").collect();
-    let mut settings: Settings = Settings {
-        ..default_settings()
-    };
-    for x in s.iter() {
-        let kv = x.split("=").collect::<Vec<&str>>();
-        match kv[0].trim() {
-            "end_of_line" => {
-                settings.end_of_line = kv[1].trim().to_string();
-            },
-            "indent_size" => {
-                settings.indent_size = kv[1].trim().parse::<i32>().unwrap();
-            },
-            "indent_style" => {
-                settings.indent_style = kv[1].trim().to_string();
-            },
-            "tab_width" => {
-                settings.tab_width = kv[1].trim().parse::<i32>().unwrap();
-            },
-            "charset" => {
-                settings.charset = kv[1].trim().to_string();
-            },
-            "root" => {
-                settings.root = kv[1].trim().to_string().parse::<bool>().unwrap();
-            },
-            "trim_trailing_whitespace" => {
-                settings.trim_trailing_whitespace = kv[1].trim().parse::<bool>().unwrap();
-            },
-            "insert_final_newline" => {
-                settings.insert_final_newline = kv[1].trim().parse::<bool>().unwrap();
-            },
-            "max_line_length" => {
-                settings.max_line_length = kv[1].trim().parse::<i32>().unwrap();
-            },
-            _ => {
-                continue;
-            }
-        }
-    };
+    let mut settings: Settings = Settings::new();
 
-    return settings;
+    for x in s.iter() {
+        // biar bisa kek destructure doang ribet banget elah
+        let (key, value) = match &x.split("=").collect::<Vec<&str>>()[..] {
+            &[key, value] => (key.trim(), value.trim()),
+            _ => continue, // not a valid key-value pair, we'll skip
+        };
+
+        match key {
+            "end_of_line" => settings.end_of_line = value.to_string(),
+            "indent_size" => settings.indent_size = value.parse::<i32>().unwrap(),
+            "indent_style" => settings.indent_style = value.to_string(),
+            "tab_width" => settings.tab_width = value.parse::<i32>().unwrap(),
+            "charset" => settings.charset = value.to_string(),
+            "root" => settings.root = value.to_string().parse::<bool>().unwrap(),
+            "trim_trailing_whitespace" => {
+                settings.trim_trailing_whitespace = value.parse::<bool>().unwrap()
+            }
+            "insert_final_newline" => {
+                settings.insert_final_newline = value.parse::<bool>().unwrap();
+            }
+            "max_line_length" => settings.max_line_length = value.parse::<i32>().unwrap(),
+            _ => continue,
+        }
+    }
+
+    settings
 }
